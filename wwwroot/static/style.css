@@ -73,6 +73,8 @@ td:first-child {
 
 #upload {
     margin-bottom: 10px;
+    margin-top: 10px;
+    text-align: right;
 }
 
 #upload button {

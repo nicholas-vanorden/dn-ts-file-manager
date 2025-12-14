@@ -80,7 +80,6 @@ function renderBreadcrumbs(path, dirCount, fileCount) {
 }
 async function uploadFile() {
     if (!fileInput.files || fileInput.files.length === 0) {
-        alert("Please select a file");
         return;
     }
     const file = fileInput.files[0];
