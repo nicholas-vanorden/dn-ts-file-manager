@@ -80,3 +80,74 @@ td:first-child {
 #upload button {
     margin-left: 5px;
 }
+
+#actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+#actions input[type="file"] {
+    max-width: 220px;
+}
+
+#actions button {
+    margin-left: 5px;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e9e9e9;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0;
+    background: #4caf50;
+    transition: width 0.1s linear;
+}
+
+.hidden {
+    display: none;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.row-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.row-actions {
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+}
+
+.item-row:hover .row-actions {
+    opacity: 1;
+}
+
+.icon {
+    cursor: pointer;
+    font-size: 14px;
+    user-select: none;
+}
+
+.icon.rename:hover {
+    color: #0969da;
+}
+
+.icon.delete:hover {
+    color: #d1242f;
+}

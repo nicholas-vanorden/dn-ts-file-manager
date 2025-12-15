@@ -1,10 +1,12 @@
 import type { BrowseResult } from "./types";
 
-const filesDiv = document.getElementById("files")!;
-const breadcrumbsDiv = document.getElementById("breadcrumbs")!;
-
-const fileInput = document.getElementById("fileInput") as HTMLInputElement;
-const uploadBtn = document.getElementById("uploadBtn") as HTMLButtonElement;
+const filesDiv = document.getElementById("files")! as HTMLElement;
+const breadcrumbsDiv = document.getElementById("breadcrumbs")! as HTMLElement;
+const fileInput = document.getElementById("fileInput")! as HTMLInputElement;
+const uploadBtn = document.getElementById("uploadBtn")! as HTMLButtonElement;
+const uploadProgress = document.getElementById("uploadProgress")! as HTMLElement;
+const progressFill = uploadProgress.querySelector(".progress-fill")! as HTMLElement;
+const newFolderBtn = document.getElementById("newFolderBtn")! as HTMLButtonElement;
 
 function getCurrentPath(): string {
     return location.hash.replace("#/", "") || "";
@@ -37,15 +39,42 @@ function renderFiles(data: BrowseResult) {
 
     for (const d of data.directories) {
         const fullPath = data.path ? `${data.path}/${d}` : d;
-        html.push(`<tr class="item-row"><td colspan="3">📁 <span class="item linkDir" data-path="${fullPath}">${d}</span></td></tr>`);
+        html.push(`
+            <tr class="item-row">
+                <td colspan="3">
+                    <div class="row">
+                        <div class="row-left">
+                            📁 <span class="item linkDir" data-path="${fullPath}">${d}</span>
+                        </div>
+                        <div class="row-actions">
+                            <span class="icon rename" title="Rename" data-name="${d}" data-type="dir">✏️</span>
+                            <span class="icon delete" title="Delete" data-name="${d}" data-type="dir">❌</span>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `);
     }
 
     for (const f of data.files) {
         const fullPath = data.path ? `${data.path}/${f.name}` : f.name;
-        html.push(`<tr class="item-row">`);
-        html.push(`<td>📄 <span class="item linkFile" data-path="${fullPath}">${f.name}</span></td>`);
-        html.push(`<td>${formatFileSize(f.size)}</td>`);
-        html.push(`<td>${formatRelativeTime(f.modified)}</td></tr>`);
+        html.push(`
+            <tr class="item-row">
+                <td>
+                    <div class="row">
+                        <div class="row-left">
+                            📄 <span class="item linkFile" data-path="${fullPath}">${f.name}</span>
+                        </div>
+                        <div class="row-actions">
+                            <span class="icon rename" title="Rename" data-name="${f.name}" data-type="file">✏️</span>
+                            <span class="icon delete" title="Delete" data-name="${f.name}" data-type="file">❌</span>
+                        </div>
+                    </div>
+                </td>
+                <td>${formatFileSize(f.size)}</td>
+                <td>${formatRelativeTime(f.modified)}</td>
+            </tr>
+        `);
     }
 
     if (data.directories.length === 0 && data.files.length === 0) {
@@ -68,6 +97,23 @@ function renderFiles(data: BrowseResult) {
             const file = (link as HTMLElement).dataset.path!;
             const url = `/files/download?path=${encodeURIComponent(file)}`;
             window.location.href = url;
+        });
+    }
+
+    for (const btn of filesDiv.querySelectorAll(".rename")) {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            renameItem((btn as HTMLElement).dataset.name!);
+        });
+    }
+
+    for (const btn of filesDiv.querySelectorAll(".delete")) {
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteItem(
+                (btn as HTMLElement).dataset.name!,
+                (btn as HTMLElement).dataset.type!
+            );
         });
     }
 }
@@ -94,10 +140,11 @@ function renderBreadcrumbs(path: string, dirCount: number, fileCount: number) {
         html.push(`<span>home</span>`);
     }
 
-    breadcrumbsDiv.innerHTML = html.join(" / ") + `<span class="dir-info"><i>${dirCount} directories and ${fileCount} files</i></span>`;
+    breadcrumbsDiv.innerHTML = html.join(" / ") +
+        `<span class="dir-info"><i>${dirCount} directories and ${fileCount} files</i></span>`;
 }
 
-async function uploadFile() {
+async function uploadFileWithProgress() {
     if (!fileInput.files || fileInput.files.length === 0) {
         return;
     }
@@ -108,32 +155,100 @@ async function uploadFile() {
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await fetch(
+    const xhr = new XMLHttpRequest();
+    xhr.open(
+        "POST",
         `/files/upload?path=${encodeURIComponent(path)}`,
-        {
-            method: "POST",
-            body: formData
-        }
+        true
     );
 
+    uploadProgress.classList.remove("hidden");
+    progressFill.style.width = "0%";
+
+    xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressFill.style.width = `${percent}%`;
+        }
+    };
+
+    xhr.onload = async () => {
+        uploadProgress.classList.add("hidden");
+        progressFill.style.width = "0%";
+        fileInput.value = "";
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+            await loadDirectory(path);
+        } else {
+            alert(`Upload failed: ${xhr.responseText}`);
+        }
+    };
+
+    xhr.onerror = () => {
+        uploadProgress.classList.add("hidden");
+        alert("Upload failed");
+    };
+
+    xhr.send(formData);
+}
+
+async function createFolder() {
+    const name = prompt("Folder name:", "New Folder");
+
+    const path = getCurrentPath();
+    const response = await fetch(`/files/mkdir?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name || "New Folder")}`, {
+        method: "POST"
+    });
+
     if (!response.ok) {
-        const text = await response.text();
-        alert(`Upload failed: ${text}`);
+        const errorText = await response.text();
+        alert(`Failed to create folder: ${errorText}`);
         return;
     }
 
-    fileInput.value = ""; // reset
-    await loadDirectory(path); // refresh listing
+    await loadDirectory(path);
 }
 
-uploadBtn.addEventListener("click", uploadFile);
-
-const xhr = new XMLHttpRequest();
-xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-        console.log(Math.round((e.loaded / e.total) * 100));
+async function renameItem(name: string) {
+    const newName = prompt("New name:", name);
+    if (!newName || newName === name) {
+        return;
     }
-};
+
+    const path = getCurrentPath();
+
+    const response = await fetch(
+        `/files/rename?path=${encodeURIComponent(path)}&oldName=${encodeURIComponent(name)}&newName=${encodeURIComponent(newName)}`,
+        { method: "POST" }
+    );
+
+    if (!response.ok) {
+        alert(await response.text());
+        return;
+    }
+
+    await loadDirectory(path);
+}
+
+async function deleteItem(name: string, type: string) {
+    if (!confirm(`Delete ${type} "${name}"? This cannot be undone.`)) {
+        return;
+    }
+
+    const path = getCurrentPath();
+
+    const response = await fetch(
+        `/files/delete?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name)}&type=${type}`,
+        { method: "POST" }
+    );
+
+    if (!response.ok) {
+        alert(await response.text());
+        return;
+    }
+
+    await loadDirectory(path);
+}
 
 function formatFileSize(bytes: number): string {
     const units = ["B", "KB", "MB", "GB", "TB"];
@@ -180,6 +295,8 @@ function formatRelativeTime(utcDate: string | Date): string {
     return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
+uploadBtn.addEventListener("click", uploadFileWithProgress);
+newFolderBtn.addEventListener("click", createFolder);
 window.addEventListener("hashchange", () => {
     loadDirectory(getCurrentPath());
 });
