@@ -97,7 +97,7 @@ namespace FileManager.Controllers {
 
         [HttpPost("upload")]
         [RequestSizeLimit(1073741824)] // 1 GB
-        public async Task<IActionResult> Upload([FromQuery] string path, IFormFile file)
+        public async Task<IActionResult> Upload([FromQuery] string? path, IFormFile file)
         {
             try
             {
@@ -111,19 +111,14 @@ namespace FileManager.Controllers {
 
                 // if there's an issue with the path, return 400
                 if (path.Contains(':') ||
-                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)))
+                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
+                    !Directory.Exists(targetDir))
                 {
                     return BadRequest(new { error = "Invalid path" });
                 }
 
-                if (!Directory.Exists(targetDir))
-                {
-                    return NotFound("Target directory does not exist");
-                }
-
                 var filePath = Path.Combine(targetDir, Path.GetFileName(file.FileName));
 
-                // Optional: prevent overwrite
                 if (System.IO.File.Exists(filePath))
                 {
                     return Conflict("File already exists");
@@ -145,6 +140,144 @@ namespace FileManager.Controllers {
             }
         }
 
+        [HttpPost("mkdir")]
+        public IActionResult CreateFolder([FromQuery] string? path, [FromQuery] string name)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    name = "New Folder";
+                }
+
+                path = NormalizePath(path);
+                
+                var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
+
+                if (path.Contains(':') ||
+                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
+                    !Directory.Exists(targetDir))
+                {
+                    return BadRequest("Invalid path");
+                }
+
+                var newDir = Path.Combine(targetDir, name);
+
+                if (Directory.Exists(newDir))
+                {
+                    return Conflict("Folder already exists");
+                }
+
+                Directory.CreateDirectory(newDir);
+
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                 _logger.LogError(ex, "CreateFolder failed");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+        
+        [HttpPost("rename")]
+        public IActionResult Rename([FromQuery] string? path, [FromQuery] string oldName, [FromQuery] string newName)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName))
+                {
+                    return BadRequest("Invalid names");
+                }
+
+                path = NormalizePath(path);
+                var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
+
+                if (path.Contains(':') ||
+                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
+                    !Directory.Exists(targetDir))
+                {
+                    return BadRequest("Invalid path");
+                }
+
+                var source = Path.Combine(targetDir, oldName);
+                var target = Path.Combine(targetDir, newName);
+
+                if (!System.IO.File.Exists(source) && !Directory.Exists(source))
+                {
+                    return NotFound("Source does not exist");
+                }
+
+                if (System.IO.File.Exists(target) || Directory.Exists(target))
+                {
+                    return Conflict("Target already exists");
+                }
+
+                if (System.IO.File.Exists(source))
+                {
+                    System.IO.File.Move(source, target);
+                }
+                else
+                {
+                    Directory.Move(source, target);
+                }
+
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                 _logger.LogError(ex, "Rename failed");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+        
+        [HttpPost("delete")]
+        public IActionResult Delete([FromQuery] string? path, [FromQuery] string name, [FromQuery] string type)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name) || (type != "file" && type != "dir"))
+                {
+                    return BadRequest("Invalid parameters");
+                }
+
+                path = NormalizePath(path);
+                var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
+
+                if (path.Contains(':') ||
+                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
+                    !Directory.Exists(targetDir))
+                {
+                    return BadRequest("Invalid path");
+                }
+
+                var target = Path.Combine(targetDir, name);
+
+                if (type == "file")
+                {
+                    if (!System.IO.File.Exists(target))
+                    {
+                        return NotFound("File does not exist");
+                    }
+                    System.IO.File.Delete(target);
+                }
+                else
+                {
+                    if (!Directory.Exists(target))
+                    {
+                        return NotFound("Directory does not exist");
+                    }
+                    Directory.Delete(target, true);
+                }
+
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                 _logger.LogError(ex, "Delete failed");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+        
         private string NormalizePath(string? path)
         {
             path ??= string.Empty;
