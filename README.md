@@ -47,21 +47,32 @@ This directory acts as a sandbox to prevent path traversal or access outside the
     "RootDirectory": "/path/to/root"
   }
 }
+```
 
-### Prerequisites
+
+## Prerequisites
 
 - .NET Core 8
 - Node.js 18+
 - npm (or pnpm / yarn)
 
+---
+
+
 ### Install frontend dependencies
 
+```bash
 npm install
+```
 
 ### Build - Compile (TypeScript → JavaScript)
 
+```bash
 npx tsc
+```
 
 ### Run
 
+```bash
 dotnet run
+```
