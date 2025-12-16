@@ -2,7 +2,7 @@
 
 A lightweight web-based file manager built with **ASP.NET Core 8** and **TypeScript**, using **no frontend frameworks**.
 
-The backend exposes a JSON API for browsing and manipulating files, and the frontend is a single-page application rendered entirely client-side using vanilla TypeScript and DOM APIs.
+The backend exposes a JSON API for browsing and manipulating files, and the frontend is a dialog component rendered entirely client-side using vanilla TypeScript and DOM APIs.
 
 This project is intentionally simple, dependency-light, and easy to understand.
 

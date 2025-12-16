@@ -1,26 +1,170 @@
-import type { BrowseResult } from "./types";
+interface FileManagerOptions {
+    triggerId: string;
+    title?: string;
+    // allowUpload?: boolean;
+    // allowDelete?: boolean;
+    // allowRename?: boolean;
+    // allowCreateFolder?: boolean;
+}
 
-const filesDiv = document.getElementById("files")! as HTMLElement;
-const breadcrumbsDiv = document.getElementById("breadcrumbs")! as HTMLElement;
-const fileInput = document.getElementById("fileInput")! as HTMLInputElement;
-const uploadBtn = document.getElementById("uploadBtn")! as HTMLButtonElement;
-const uploadProgress = document.getElementById("uploadProgress")! as HTMLElement;
-const progressFill = uploadProgress.querySelector(".progress-fill")! as HTMLElement;
-const newFolderBtn = document.getElementById("newFolderBtn")! as HTMLButtonElement;
+interface BrowseResult {
+    path: string;
+    fullPath: string;
+    parent?: string | null;
+    directories: string[];
+    files: FileDetails[];
+}
+
+interface FileDetails {
+    name: string;
+    size: number;
+    modified: string;
+}
+
+type UI = ReturnType<typeof bindUI>;
+
+export function initFileManager(options: FileManagerOptions) {
+    const trigger = document.getElementById(options.triggerId)! as HTMLElement;
+    if (!trigger) {
+        throw new Error(`Trigger element '${options.triggerId}' not found`);
+    }
+
+    const dialog = createDialog(options.title ?? "File Manager");
+    document.body.appendChild(dialog);
+
+    const ui = bindUI(dialog);
+    wireEvents(dialog, ui);
+
+    trigger.addEventListener("click", () => {
+        dialog.showModal();
+    });
+
+    initializeFileManagerLogic(ui);
+
+    if (shouldOpenFromHash()) {
+        dialog.showModal();
+        loadDirectory(ui, getCurrentPath());
+    }
+}
+
+function createDialog(title: string): HTMLDialogElement {
+    const dialog = document.createElement("dialog");
+    dialog.className = "file-manager-dialog";
+
+    dialog.innerHTML = `
+        <div class="fm-header">
+            <h2>${title}</h2>
+            <button class="fm-close" aria-label="Close">✕</button>
+        </div>
+
+        <div class="fm-body">
+            <div id="breadcrumbs"></div>
+            <div id="files"></div>
+            <div id="actions">
+                <input type="file" id="fileInput" />
+                <button id="uploadBtn">Upload</button>
+                <button id="newFolderBtn">New Folder</button>
+            </div>
+            <div id="uploadProgress" class="hidden">
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    return dialog;
+}
+
+function bindUI(dialog: HTMLDialogElement) {
+    return {
+        closeBtn: dialog.querySelector(".fm-close")! as HTMLButtonElement,
+        filesDiv: dialog.querySelector("#files")! as HTMLElement,
+        breadcrumbsDiv: dialog.querySelector("#breadcrumbs")! as HTMLElement,
+        fileInput: dialog.querySelector("#fileInput")! as HTMLInputElement,
+        uploadBtn: dialog.querySelector("#uploadBtn")! as HTMLButtonElement,
+        newFolderBtn: dialog.querySelector("#newFolderBtn")! as HTMLButtonElement,
+        uploadProgress: dialog.querySelector("#uploadProgress")! as HTMLElement,
+        progressFill: dialog.querySelector(".progress-fill")! as HTMLElement,
+    };
+}
+
+function wireEvents(dialog: HTMLDialogElement, ui: UI) {
+    dialog.addEventListener("click", (e) => {
+        if (e.target === dialog) {
+            dialog.close();
+        }
+    });
+
+    ui.closeBtn.addEventListener("click", () => {
+        dialog.close();
+    });
+
+    ui.uploadBtn.addEventListener("click", async () => {
+        if (!ui.fileInput.files?.length) {
+            return;
+        }   
+        await uploadFileWithProgress(ui, ui.fileInput.files[0]);
+    });
+
+    ui.newFolderBtn.addEventListener("click", async () => {
+        const name = prompt("Folder name:", "New Folder");
+        await createFolder(ui, name || "New Folder");
+    });
+}
+
+function initializeFileManagerLogic(ui: UI) {
+    window.addEventListener("hashchange", () => {
+        loadDirectory(ui, getCurrentPath());
+    });
+
+    loadDirectory(ui, getCurrentPath());
+}
+
+function shouldOpenFromHash(): boolean {
+    const path = location.hash.replace("#/", "");
+    return path.length > 0;
+}
 
 function getCurrentPath(): string {
     return location.hash.replace("#/", "") || "";
 }
 
-async function loadDirectory(path: string) {
+async function loadDirectory(ui: UI, path: string) {
     const response = await fetch(`/files?path=${encodeURIComponent(path)}`);
     const data: BrowseResult = await response.json();
 
-    renderBreadcrumbs(data.path, data.directories.length, data.files.length);
-    renderFiles(data);
+    renderBreadcrumbs(ui, data.path, data.directories.length, data.files.length);
+    renderFiles(ui, data);
 }
 
-function renderFiles(data: BrowseResult) {
+function renderBreadcrumbs(ui: UI, path: string, dirCount: number, fileCount: number) {
+    const html: string[] = [];
+
+    if (path) {
+        html.push(`<a href="#/">home</a>`);
+
+        const parts = path.split("/");
+        let accumulatedPath = "#";
+
+        for (let i = 0; i < parts.length; i++) {
+            if (i === parts.length - 1) {
+                html.push(`<span>${parts[i]}</span>`);
+            } else {
+                accumulatedPath += "/" + parts[i];
+                html.push(`<a href="${accumulatedPath}">${parts[i]}</a>`);
+            }
+        }
+        html.push();
+    } else {
+        html.push(`<span>home</span>`);
+    }
+
+    ui.breadcrumbsDiv.innerHTML = html.join(" / ") +
+        `<span class="dir-info"><i>${dirCount} directories and ${fileCount} files</i></span>`;
+}
+
+function renderFiles(ui: UI, data: BrowseResult) {
     const html: string[] = [];
 
     if (data.files.length === 0) {
@@ -83,16 +227,16 @@ function renderFiles(data: BrowseResult) {
 
     html.push("</tbody></table>");
 
-    filesDiv.innerHTML = html.join("");
+    ui.filesDiv.innerHTML = html.join("");
 
-    for (const link of filesDiv.querySelectorAll(".linkDir")) {
+    for (const link of ui.filesDiv.querySelectorAll(".linkDir")) {
         link.addEventListener("click", () => {
             const dir = (link as HTMLElement).dataset.path!;
             location.hash = "#/" + dir;
         });
     }
 
-    for (const link of filesDiv.querySelectorAll(".linkFile")) {
+    for (const link of ui.filesDiv.querySelectorAll(".linkFile")) {
         link.addEventListener("click", () => {
             const file = (link as HTMLElement).dataset.path!;
             const url = `/files/download?path=${encodeURIComponent(file)}`;
@@ -100,17 +244,17 @@ function renderFiles(data: BrowseResult) {
         });
     }
 
-    for (const btn of filesDiv.querySelectorAll(".rename")) {
+    for (const btn of ui.filesDiv.querySelectorAll(".rename")) {
         btn.addEventListener("click", (e) => {
             e.stopPropagation();
-            renameItem((btn as HTMLElement).dataset.name!);
+            renameItem(ui, (btn as HTMLElement).dataset.name!);
         });
     }
 
-    for (const btn of filesDiv.querySelectorAll(".delete")) {
+    for (const btn of ui.filesDiv.querySelectorAll(".delete")) {
         btn.addEventListener("click", (e) => {
             e.stopPropagation();
-            deleteItem(
+            deleteItem(ui,
                 (btn as HTMLElement).dataset.name!,
                 (btn as HTMLElement).dataset.type!
             );
@@ -118,40 +262,8 @@ function renderFiles(data: BrowseResult) {
     }
 }
 
-function renderBreadcrumbs(path: string, dirCount: number, fileCount: number) {
-    const html: string[] = [];
-
-    if (path) {
-        html.push(`<a href="#/">home</a>`);
-
-        const parts = path.split("/");
-        let accumulatedPath = "#";
-
-        for (let i = 0; i < parts.length; i++) {
-            if (i === parts.length - 1) {
-                html.push(`<span>${parts[i]}</span>`);
-            } else {
-                accumulatedPath += "/" + parts[i];
-                html.push(`<a href="${accumulatedPath}">${parts[i]}</a>`);
-            }
-        }
-        html.push();
-    } else {
-        html.push(`<span>home</span>`);
-    }
-
-    breadcrumbsDiv.innerHTML = html.join(" / ") +
-        `<span class="dir-info"><i>${dirCount} directories and ${fileCount} files</i></span>`;
-}
-
-async function uploadFileWithProgress() {
-    if (!fileInput.files || fileInput.files.length === 0) {
-        return;
-    }
-
-    const file = fileInput.files[0];
+async function uploadFileWithProgress(ui: UI, file: File) {
     const path = getCurrentPath();
-
     const formData = new FormData();
     formData.append("file", file);
 
@@ -162,39 +274,37 @@ async function uploadFileWithProgress() {
         true
     );
 
-    uploadProgress.classList.remove("hidden");
-    progressFill.style.width = "0%";
+    ui.uploadProgress.classList.remove("hidden");
+    ui.progressFill.style.width = "0%";
 
     xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
             const percent = Math.round((e.loaded / e.total) * 100);
-            progressFill.style.width = `${percent}%`;
+            ui.progressFill.style.width = `${percent}%`;
         }
     };
 
     xhr.onload = async () => {
-        uploadProgress.classList.add("hidden");
-        progressFill.style.width = "0%";
-        fileInput.value = "";
+        ui.uploadProgress.classList.add("hidden");
+        ui.progressFill.style.width = "0%";
+        ui.fileInput.value = "";
 
         if (xhr.status >= 200 && xhr.status < 300) {
-            await loadDirectory(path);
+            await loadDirectory(ui, path);
         } else {
             alert(`Upload failed: ${xhr.responseText}`);
         }
     };
 
     xhr.onerror = () => {
-        uploadProgress.classList.add("hidden");
+        ui.uploadProgress.classList.add("hidden");
         alert("Upload failed");
     };
 
     xhr.send(formData);
 }
 
-async function createFolder() {
-    const name = prompt("Folder name:", "New Folder");
-
+async function createFolder(ui: UI, name: string = "New Folder") {
     const path = getCurrentPath();
     const response = await fetch(`/files/mkdir?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name || "New Folder")}`, {
         method: "POST"
@@ -206,10 +316,10 @@ async function createFolder() {
         return;
     }
 
-    await loadDirectory(path);
+    await loadDirectory(ui, path);
 }
 
-async function renameItem(name: string) {
+async function renameItem(ui: UI, name: string) {
     const newName = prompt("New name:", name);
     if (!newName || newName === name) {
         return;
@@ -227,10 +337,10 @@ async function renameItem(name: string) {
         return;
     }
 
-    await loadDirectory(path);
+    await loadDirectory(ui, path);
 }
 
-async function deleteItem(name: string, type: string) {
+async function deleteItem(ui: UI, name: string, type: string) {
     if (!confirm(`Delete ${type} "${name}"? This cannot be undone.`)) {
         return;
     }
@@ -247,7 +357,7 @@ async function deleteItem(name: string, type: string) {
         return;
     }
 
-    await loadDirectory(path);
+    await loadDirectory(ui, path);
 }
 
 function formatFileSize(bytes: number): string {
@@ -294,12 +404,3 @@ function formatRelativeTime(utcDate: string | Date): string {
 
     return `${years} year${years === 1 ? "" : "s"} ago`;
 }
-
-uploadBtn.addEventListener("click", uploadFileWithProgress);
-newFolderBtn.addEventListener("click", createFolder);
-window.addEventListener("hashchange", () => {
-    loadDirectory(getCurrentPath());
-});
-
-// Initial load
-loadDirectory(getCurrentPath());
