@@ -1,10 +1,10 @@
 interface FileManagerOptions {
     triggerId: string;
     title?: string;
-    // allowUpload?: boolean;
-    // allowDelete?: boolean;
-    // allowRename?: boolean;
-    // allowCreateFolder?: boolean;
+    allowUpload?: boolean;
+    allowDelete?: boolean;
+    allowRename?: boolean;
+    allowCreateFolder?: boolean;
 }
 
 interface BrowseResult {
@@ -29,47 +29,65 @@ export function initFileManager(options: FileManagerOptions) {
         throw new Error(`Trigger element '${options.triggerId}' not found`);
     }
 
-    const dialog = createDialog(options.title ?? "File Manager");
+    const dialog = createDialog(options.title ?? "File Manager", options.allowUpload ?? false, options.allowCreateFolder ?? false);
     document.body.appendChild(dialog);
 
     const ui = bindUI(dialog);
-    wireEvents(dialog, ui);
+    wireEvents(dialog, ui, options.allowRename ?? false, options.allowDelete ?? false);
 
     trigger.addEventListener("click", () => {
         dialog.showModal();
     });
 
-    initializeFileManagerLogic(ui);
+    initializeFileManagerLogic(ui, options.allowRename ?? false, options.allowDelete ?? false);
 
     if (shouldOpenFromHash()) {
         dialog.showModal();
-        loadDirectory(ui, getCurrentPath());
+        loadDirectory(ui, getCurrentPath(), options.allowRename ?? false, options.allowDelete ?? false);
     }
 }
 
-function createDialog(title: string): HTMLDialogElement {
-    const dialog = document.createElement("dialog");
-    dialog.className = "file-manager-dialog";
-
-    dialog.innerHTML = `
-        <div class="fm-header">
-            <h2>${title}</h2>
-            <button class="fm-close" aria-label="Close">✕</button>
-        </div>
-
-        <div class="fm-body">
-            <div id="breadcrumbs"></div>
-            <div id="files"></div>
+function createDialog(title: string, canUpload: boolean, canCreateFolder: boolean): HTMLDialogElement {
+    let actionsHtml = "";
+    let uploadProgressHtml = "";
+    if (canUpload || canCreateFolder) {
+        const uploadHtml = canUpload ? `
+            <input type="file" id="fileInput" />
+            <button id="uploadBtn">Upload</button>
+        ` : "";
+        const newFolderHtml = canCreateFolder ? `
+            <button id="newFolderBtn">New Folder</button>
+        ` : "";
+        actionsHtml = `
             <div id="actions">
-                <input type="file" id="fileInput" />
-                <button id="uploadBtn">Upload</button>
-                <button id="newFolderBtn">New Folder</button>
-            </div>
+                ${uploadHtml}
+                ${newFolderHtml}
+            </div>`;
+        uploadProgressHtml = canUpload ? `
             <div id="uploadProgress" class="hidden">
                 <div class="progress-bar">
                     <div class="progress-fill"></div>
                 </div>
+            </div>` : "";
+    }
+
+    const dialog = document.createElement("dialog");
+    dialog.className = "fm-dialog";
+
+    dialog.innerHTML = `
+        <div class="fm-dialog-container">
+            <div class="fm-header">
+                <h2>${title}</h2>
+                <button class="fm-close" aria-label="Close">✕</button>
             </div>
+
+            <div class="fm-body">
+                <div id="breadcrumbs"></div>
+                <div id="files"></div>
+                ${actionsHtml}
+                ${uploadProgressHtml}
+            </div>
+            <div class="fm-dialog-filler"></div>
         </div>
     `;
 
@@ -81,15 +99,15 @@ function bindUI(dialog: HTMLDialogElement) {
         closeBtn: dialog.querySelector(".fm-close")! as HTMLButtonElement,
         filesDiv: dialog.querySelector("#files")! as HTMLElement,
         breadcrumbsDiv: dialog.querySelector("#breadcrumbs")! as HTMLElement,
-        fileInput: dialog.querySelector("#fileInput")! as HTMLInputElement,
-        uploadBtn: dialog.querySelector("#uploadBtn")! as HTMLButtonElement,
-        newFolderBtn: dialog.querySelector("#newFolderBtn")! as HTMLButtonElement,
-        uploadProgress: dialog.querySelector("#uploadProgress")! as HTMLElement,
-        progressFill: dialog.querySelector(".progress-fill")! as HTMLElement,
+        fileInput: dialog.querySelector("#fileInput") as HTMLInputElement,
+        uploadBtn: dialog.querySelector("#uploadBtn") as HTMLButtonElement,
+        newFolderBtn: dialog.querySelector("#newFolderBtn") as HTMLButtonElement,
+        uploadProgress: dialog.querySelector("#uploadProgress") as HTMLElement,
+        progressFill: dialog.querySelector(".progress-fill") as HTMLElement,
     };
 }
 
-function wireEvents(dialog: HTMLDialogElement, ui: UI) {
+function wireEvents(dialog: HTMLDialogElement, ui: UI, canRename: boolean, canDelete: boolean) {
     dialog.addEventListener("click", (e) => {
         if (e.target === dialog) {
             dialog.close();
@@ -100,25 +118,25 @@ function wireEvents(dialog: HTMLDialogElement, ui: UI) {
         dialog.close();
     });
 
-    ui.uploadBtn.addEventListener("click", async () => {
+    ui.uploadBtn && ui.uploadBtn.addEventListener("click", async () => {
         if (!ui.fileInput.files?.length) {
             return;
         }   
-        await uploadFileWithProgress(ui, ui.fileInput.files[0]);
+        await uploadFileWithProgress(ui, ui.fileInput.files[0], canRename, canDelete);
     });
 
-    ui.newFolderBtn.addEventListener("click", async () => {
+    ui.newFolderBtn && ui.newFolderBtn.addEventListener("click", async () => {
         const name = prompt("Folder name:", "New Folder");
-        await createFolder(ui, name || "New Folder");
+        await createFolder(ui, name || "New Folder", canRename, canDelete);
     });
 }
 
-function initializeFileManagerLogic(ui: UI) {
+function initializeFileManagerLogic(ui: UI, canRename: boolean, canDelete: boolean) {
     window.addEventListener("hashchange", () => {
-        loadDirectory(ui, getCurrentPath());
+        loadDirectory(ui, getCurrentPath(), canRename, canDelete);
     });
 
-    loadDirectory(ui, getCurrentPath());
+    loadDirectory(ui, getCurrentPath(), canRename, canDelete);
 }
 
 function shouldOpenFromHash(): boolean {
@@ -130,12 +148,12 @@ function getCurrentPath(): string {
     return location.hash.replace("#/", "") || "";
 }
 
-async function loadDirectory(ui: UI, path: string) {
+async function loadDirectory(ui: UI, path: string, canRename: boolean, canDelete: boolean) {
     const response = await fetch(`/files?path=${encodeURIComponent(path)}`);
     const data: BrowseResult = await response.json();
 
     renderBreadcrumbs(ui, data.path, data.directories.length, data.files.length);
-    renderFiles(ui, data);
+    renderFiles(ui, data, canRename, canDelete);
 }
 
 function renderBreadcrumbs(ui: UI, path: string, dirCount: number, fileCount: number) {
@@ -164,7 +182,7 @@ function renderBreadcrumbs(ui: UI, path: string, dirCount: number, fileCount: nu
         `<span class="dir-info"><i>${dirCount} directories and ${fileCount} files</i></span>`;
 }
 
-function renderFiles(ui: UI, data: BrowseResult) {
+function renderFiles(ui: UI, data: BrowseResult, canRename: boolean, canDelete: boolean) {
     const html: string[] = [];
 
     if (data.files.length === 0) {
@@ -176,9 +194,9 @@ function renderFiles(ui: UI, data: BrowseResult) {
     html.push("<tbody>");
 
     if (data.parent) {
-        html.push(`<tr class="item-row"><td colspan="3">📁 <span class="item linkDir" data-path="${data.parent}">..</span></td></tr>`);
+        html.push(`<tr class="item-row"><td colspan="3"><span class="icon-dir">📁 </span><span class="item linkDir" data-path="${data.parent}">..</span></td></tr>`);
     } else if (data.path) {
-        html.push(`<tr class="item-row"><td colspan="3">📁 <span class="item linkDir" data-path="">..</td></tr>`);
+        html.push(`<tr class="item-row"><td colspan="3"><span class="icon-dir">📁 </span><span class="item linkDir" data-path="">..</td></tr>`);
     }
 
     for (const d of data.directories) {
@@ -188,11 +206,11 @@ function renderFiles(ui: UI, data: BrowseResult) {
                 <td colspan="3">
                     <div class="row">
                         <div class="row-left">
-                            📁 <span class="item linkDir" data-path="${fullPath}">${d}</span>
+                            <span class="icon-dir">📁 </span><span class="item linkDir" data-path="${fullPath}">${d}</span>
                         </div>
                         <div class="row-actions">
-                            <span class="icon rename" title="Rename" data-name="${d}" data-type="dir">✏️</span>
-                            <span class="icon delete" title="Delete" data-name="${d}" data-type="dir">❌</span>
+                            ${canRename ? `<span class="icon rename" title="Rename" data-name="${d}" data-type="dir">✏️</span>` : ""}
+                            ${canDelete ? `<span class="icon delete" title="Delete" data-name="${d}" data-type="dir">❌</span>` : ""}
                         </div>
                     </div>
                 </td>
@@ -207,11 +225,11 @@ function renderFiles(ui: UI, data: BrowseResult) {
                 <td>
                     <div class="row">
                         <div class="row-left">
-                            📄 <span class="item linkFile" data-path="${fullPath}">${f.name}</span>
+                            <span class="icon-file">📄 </span><span class="item linkFile" title="Download" data-path="${fullPath}">${f.name}</span>
                         </div>
                         <div class="row-actions">
-                            <span class="icon rename" title="Rename" data-name="${f.name}" data-type="file">✏️</span>
-                            <span class="icon delete" title="Delete" data-name="${f.name}" data-type="file">❌</span>
+                            ${canRename ? `<span class="icon rename" title="Rename" data-name="${f.name}" data-type="file">✏️</span>` : ""}
+                            ${canDelete ? `<span class="icon delete" title="Delete" data-name="${f.name}" data-type="file">❌</span>` : ""}
                         </div>
                     </div>
                 </td>
@@ -244,25 +262,35 @@ function renderFiles(ui: UI, data: BrowseResult) {
         });
     }
 
-    for (const btn of ui.filesDiv.querySelectorAll(".rename")) {
-        btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            renameItem(ui, (btn as HTMLElement).dataset.name!);
-        });
+    if (canRename) {
+        for (const btn of ui.filesDiv.querySelectorAll(".rename")) {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                renameItem(ui,
+                    (btn as HTMLElement).dataset.name!,
+                    canRename,
+                    canDelete
+                );
+            });
+        }
     }
 
-    for (const btn of ui.filesDiv.querySelectorAll(".delete")) {
-        btn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            deleteItem(ui,
-                (btn as HTMLElement).dataset.name!,
-                (btn as HTMLElement).dataset.type!
-            );
-        });
+    if (canDelete) {
+        for (const btn of ui.filesDiv.querySelectorAll(".delete")) {
+            btn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                deleteItem(ui,
+                    (btn as HTMLElement).dataset.name!,
+                    (btn as HTMLElement).dataset.type!,
+                    canRename,
+                    canDelete
+                );
+            });
+        }
     }
 }
 
-async function uploadFileWithProgress(ui: UI, file: File) {
+async function uploadFileWithProgress(ui: UI, file: File, canRename: boolean, canDelete: boolean) {
     const path = getCurrentPath();
     const formData = new FormData();
     formData.append("file", file);
@@ -290,7 +318,7 @@ async function uploadFileWithProgress(ui: UI, file: File) {
         ui.fileInput.value = "";
 
         if (xhr.status >= 200 && xhr.status < 300) {
-            await loadDirectory(ui, path);
+            await loadDirectory(ui, path, canRename, canDelete);
         } else {
             alert(`Upload failed: ${xhr.responseText}`);
         }
@@ -304,7 +332,7 @@ async function uploadFileWithProgress(ui: UI, file: File) {
     xhr.send(formData);
 }
 
-async function createFolder(ui: UI, name: string = "New Folder") {
+async function createFolder(ui: UI, name: string = "New Folder", canRename: boolean, canDelete: boolean) {
     const path = getCurrentPath();
     const response = await fetch(`/files/mkdir?path=${encodeURIComponent(path)}&name=${encodeURIComponent(name || "New Folder")}`, {
         method: "POST"
@@ -316,10 +344,10 @@ async function createFolder(ui: UI, name: string = "New Folder") {
         return;
     }
 
-    await loadDirectory(ui, path);
+    await loadDirectory(ui, path, canRename, canDelete);
 }
 
-async function renameItem(ui: UI, name: string) {
+async function renameItem(ui: UI, name: string, canRename: boolean, canDelete: boolean) {
     const newName = prompt("New name:", name);
     if (!newName || newName === name) {
         return;
@@ -337,10 +365,10 @@ async function renameItem(ui: UI, name: string) {
         return;
     }
 
-    await loadDirectory(ui, path);
+    await loadDirectory(ui, path, canRename, canDelete);
 }
 
-async function deleteItem(ui: UI, name: string, type: string) {
+async function deleteItem(ui: UI, name: string, type: string, canRename: boolean, canDelete: boolean) {
     if (!confirm(`Delete ${type} "${name}"? This cannot be undone.`)) {
         return;
     }
@@ -357,7 +385,7 @@ async function deleteItem(ui: UI, name: string, type: string) {
         return;
     }
 
-    await loadDirectory(ui, path);
+    await loadDirectory(ui, path, canRename, canDelete);
 }
 
 function formatFileSize(bytes: number): string {
