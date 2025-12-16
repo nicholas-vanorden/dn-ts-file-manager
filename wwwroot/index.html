@@ -3,28 +3,23 @@
 <head>
     <meta charset="utf-8" />
     <title>File Manager</title>
-    <link rel="stylesheet" href="/static/style.css"/>
+    <link rel="stylesheet" href="/static/filemanager.css"/>
 </head>
 <body>
-    <div class="grid">
-        <div class="grid-item">
-            <h1>File Manager</h1>
-        </div>
-        <div class="grid-item">
-            <div id="breadcrumbs"></div>
-            <div id="files"></div>
-            <div id="actions">
-                <input type="file" id="fileInput" />
-                <button id="uploadBtn">Upload</button>
-                <button id="newFolderBtn">New Folder</button>
-            </div>
-            <div id="uploadProgress" class="hidden">
-                <div class="progress-bar">
-                    <div class="progress-fill"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <script type="module" src="main.js"></script>
+
+    <button id="openFileManager">Open File Manager</button>
+
+    <script type="module">
+        import { initFileManager } from './filemanager.js';
+        initFileManager({
+            triggerId: "openFileManager",
+            title: "File Manager Dialog",
+            // allowUpload: true,
+            // allowDelete: true,
+            // allowRename: true,
+            // allowCreateFolder: true
+        });
+    </script>
+    
 </body>
 </html>
