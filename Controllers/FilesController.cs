@@ -30,6 +30,8 @@ namespace FileManager.Controllers {
                     !fullPath.StartsWith(Path.GetFullPath(_rootDirectory)) ||
                     !Directory.Exists(fullPath))
                 {
+                    _logger.LogWarning("Invalid path requested: {path}", path);
+
                     path = string.Empty;
                     fullPath = Path.GetFullPath(_rootDirectory);
                 }
@@ -83,9 +85,11 @@ namespace FileManager.Controllers {
                     !fullPath.StartsWith(Path.GetFullPath(_rootDirectory)) ||
                     !System.IO.File.Exists(fullPath))
                 {
+                    _logger.LogWarning("Invalid download path requested: {path}", path);
                     return NotFound();
                 }
 
+                _logger.LogInformation("File downloaded: {fullPath}", fullPath);
                 return PhysicalFile(fullPath, contentType, fileName, enableRangeProcessing: true);
             }
             catch (Exception ex)
@@ -103,6 +107,7 @@ namespace FileManager.Controllers {
             {
                 if (file == null || file.Length == 0)
                 {
+                    _logger.LogWarning("Upload attempted with no file");
                     return BadRequest(new { error = "No file uploaded" });
                 }
 
@@ -114,6 +119,7 @@ namespace FileManager.Controllers {
                     !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
                     !Directory.Exists(targetDir))
                 {
+                    _logger.LogWarning("Invalid upload path: {path}", path);
                     return BadRequest(new { error = "Invalid path" });
                 }
 
@@ -121,12 +127,14 @@ namespace FileManager.Controllers {
 
                 if (System.IO.File.Exists(filePath))
                 {
+                    _logger.LogWarning("Upload conflict: file already exists at {filePath}", filePath);
                     return Conflict("File already exists");
                 }
 
                 await using var stream = new FileStream(filePath, FileMode.CreateNew);
                 await file.CopyToAsync(stream);
 
+                _logger.LogInformation("File uploaded: {filePath}", filePath);
                 return Ok(new { 
                     name = file.FileName, 
                     size = file.Length,
@@ -158,6 +166,7 @@ namespace FileManager.Controllers {
                     !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
                     !Directory.Exists(targetDir))
                 {
+                    _logger.LogWarning("Invalid path for CreateFolder: {path}", path);
                     return BadRequest("Invalid path");
                 }
 
@@ -165,11 +174,13 @@ namespace FileManager.Controllers {
 
                 if (Directory.Exists(newDir))
                 {
+                    _logger.LogWarning("CreateFolder conflict: folder already exists at {newDir}", newDir);
                     return Conflict("Folder already exists");
                 }
 
                 Directory.CreateDirectory(newDir);
 
+                _logger.LogInformation("Folder created: {newDir}", newDir);
                 return Ok();
             }
             catch (Exception ex)
@@ -186,6 +197,7 @@ namespace FileManager.Controllers {
             {
                 if (string.IsNullOrWhiteSpace(oldName) || string.IsNullOrWhiteSpace(newName))
                 {
+                    _logger.LogWarning("Invalid names for Rename: oldName='{oldName}', newName='{newName}'", oldName, newName);
                     return BadRequest("Invalid names");
                 }
 
@@ -196,6 +208,7 @@ namespace FileManager.Controllers {
                     !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
                     !Directory.Exists(targetDir))
                 {
+                    _logger.LogWarning("Invalid path for Rename: {path}", path);
                     return BadRequest("Invalid path");
                 }
 
@@ -204,11 +217,13 @@ namespace FileManager.Controllers {
 
                 if (!System.IO.File.Exists(source) && !Directory.Exists(source))
                 {
+                    _logger.LogWarning("Rename source does not exist: {source}", source);
                     return NotFound("Source does not exist");
                 }
 
                 if (System.IO.File.Exists(target) || Directory.Exists(target))
                 {
+                    _logger.LogWarning("Rename conflict: target already exists at {target}", target);
                     return Conflict("Target already exists");
                 }
 
@@ -221,6 +236,7 @@ namespace FileManager.Controllers {
                     Directory.Move(source, target);
                 }
 
+                _logger.LogInformation("Renamed '{source}' to '{target}'", source, target);
                 return Ok();
             }
             catch (Exception ex)
@@ -237,6 +253,9 @@ namespace FileManager.Controllers {
             {
                 if (string.IsNullOrWhiteSpace(name) || (type != "file" && type != "dir"))
                 {
+                    _logger.LogWarning(
+                        "Invalid parameters for Delete: name='{name}', type='{type}'. Type must be 'file' or 'dir'",
+                        name, type);
                     return BadRequest("Invalid parameters");
                 }
 
@@ -247,6 +266,7 @@ namespace FileManager.Controllers {
                     !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
                     !Directory.Exists(targetDir))
                 {
+                    _logger.LogWarning("Invalid path for Delete: {path}", path);
                     return BadRequest("Invalid path");
                 }
 
@@ -256,6 +276,7 @@ namespace FileManager.Controllers {
                 {
                     if (!System.IO.File.Exists(target))
                     {
+                        _logger.LogWarning("Delete file does not exist: {target}", target);
                         return NotFound("File does not exist");
                     }
                     System.IO.File.Delete(target);
@@ -264,11 +285,13 @@ namespace FileManager.Controllers {
                 {
                     if (!Directory.Exists(target))
                     {
+                        _logger.LogWarning("Delete directory does not exist: {target}", target);
                         return NotFound("Directory does not exist");
                     }
                     Directory.Delete(target, true);
                 }
 
+                _logger.LogInformation("Deleted {type} at '{target}'", type, target);
                 return Ok();
             }
             catch (Exception ex)
