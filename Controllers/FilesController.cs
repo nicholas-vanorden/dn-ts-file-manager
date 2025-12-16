@@ -2,11 +2,12 @@ using System.Net;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
-namespace FileManager.Controllers {
+namespace FileManager.Controllers
+{
     [ApiController]
     [Route("[controller]")]
-    public class FilesController : ControllerBase {
-
+    public class FilesController : ControllerBase
+    {
         private readonly ILogger<FilesController> _logger;
         private readonly string _rootDirectory;
 
@@ -17,6 +18,27 @@ namespace FileManager.Controllers {
                 ?? throw new Exception("RootDirectory not set");
         }
 
+        /// <summary>
+        /// Browse directories and list files
+        /// </summary>
+        /// <param name="path">The path relative to the root directory</param>
+        /// <returns>JSON object with directories and files
+        /// structure:
+        /// {
+        ///   "path": "current/relative/path",
+        ///   "fullPath": "C:/absolute/path/to/current/relative/path",
+        ///   "parent": "current/relative", // null if at root
+        ///   "directories": [ "subdir1", "subdir2", ... ],
+        ///   "files": [
+        ///    {
+        ///      "name": "file1.txt",
+        ///      "size": 1024,
+        ///      "modified": "2023-01-01T00:00:00Z"
+        ///    },
+        ///     ...
+        ///   ]
+        /// }
+        /// </returns>
         [HttpGet]
         public IActionResult Browse([FromQuery] string? path)
         {
@@ -70,6 +92,11 @@ namespace FileManager.Controllers {
             }
         }
 
+        /// <summary>
+        /// Download a file
+        /// </summary>
+        /// <param name="path">Relative path to the file</param>
+        /// <returns>Physical file content</returns>
         [HttpGet("download")]
         public IActionResult Download([FromQuery] string? path)
         {
@@ -99,6 +126,12 @@ namespace FileManager.Controllers {
             }
         }
 
+        /// <summary>
+        /// Upload a file
+        /// </summary>
+        /// <param name="path">Relative path to the target directory</param>
+        /// <param name="file">The file to upload</param>
+        /// <returns>HTTP 200 OK on success, HTTP 400 Bad Request on invalid path, HTTP 409 Conflict if file already exists</returns>
         [HttpPost("upload")]
         [RequestSizeLimit(1073741824)] // 1 GB
         public async Task<IActionResult> Upload([FromQuery] string? path, IFormFile file)
@@ -135,11 +168,7 @@ namespace FileManager.Controllers {
                 await file.CopyToAsync(stream);
 
                 _logger.LogInformation("File uploaded: {filePath}", filePath);
-                return Ok(new { 
-                    name = file.FileName, 
-                    size = file.Length,
-                    modified = DateTime.UtcNow
-                });
+                return Ok();
             }
             catch (Exception ex)
             {
@@ -148,6 +177,12 @@ namespace FileManager.Controllers {
             }
         }
 
+        /// <summary>
+        /// Create a new folder
+        /// </summary>
+        /// <param name="path">Relative path to the target directory</param>
+        /// <param name="name">Name of the new folder</param>
+        /// <returns>HTTP 200 OK on success, HTTP 400 Bad Request on invalid path, HTTP 409 Conflict if folder already exists</returns>
         [HttpPost("mkdir")]
         public IActionResult CreateFolder([FromQuery] string? path, [FromQuery] string name)
         {
@@ -190,6 +225,13 @@ namespace FileManager.Controllers {
             }
         }
         
+        /// <summary>
+        /// Rename a file or directory
+        /// </summary>
+        /// <param name="path">Relative path to the target directory</param>
+        /// <param name="oldName">Current name of the file or directory</param>
+        /// <param name="newName">New name for the file or directory</param>
+        /// <returns>HTTP 200 OK on success, HTTP 400 Bad Request on invalid parameters, HTTP 404 Not Found if source does not exist, HTTP 409 Conflict if target already exists</returns>
         [HttpPost("rename")]
         public IActionResult Rename([FromQuery] string? path, [FromQuery] string oldName, [FromQuery] string newName)
         {
@@ -246,6 +288,13 @@ namespace FileManager.Controllers {
             }
         }
         
+        /// <summary>
+        /// Delete a file or directory
+        /// </summary>
+        /// <param name="path">Relative path to the target directory</param>
+        /// <param name="name">Name of the file or directory to delete</param>
+        /// <param name="type">Type of item to delete ('file' or 'dir')</param>
+        /// <returns>HTTP 200 OK on success, HTTP 400 Bad Request on invalid parameters, HTTP 404 Not Found if item does not exist</returns>
         [HttpPost("delete")]
         public IActionResult Delete([FromQuery] string? path, [FromQuery] string name, [FromQuery] string type)
         {
