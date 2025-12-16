@@ -337,7 +337,7 @@ namespace FileManager.Controllers
                         _logger.LogWarning("Delete directory does not exist: {target}", target);
                         return NotFound("Directory does not exist");
                     }
-                    Directory.Delete(target, true);
+                    DeleteDirectorySafely(target);
                 }
 
                 _logger.LogInformation("Deleted {type} at '{target}'", type, target);
@@ -354,6 +354,26 @@ namespace FileManager.Controllers
         {
             path ??= string.Empty;
             return WebUtility.UrlDecode(path).Replace('\\', '/').Trim('/');
+        }
+
+        private void DeleteDirectorySafely(string path)
+        {
+            if (!Directory.Exists(path))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+            {
+                System.IO.File.SetAttributes(file, FileAttributes.Normal);
+            }
+
+            foreach (var dir in Directory.GetDirectories(path, "*", SearchOption.AllDirectories))
+            {
+                System.IO.File.SetAttributes(dir, FileAttributes.Normal);
+            }
+
+            Directory.Delete(path, recursive: true);
         }
     }
 }
