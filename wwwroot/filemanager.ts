@@ -23,6 +23,18 @@ interface FileDetails {
 
 type UI = ReturnType<typeof bindUI>;
 
+/**
+ * Initialize the file manager dialog
+ * 
+ * @param options - The configuration options for the file manager dialog
+ * @param options.triggerId - The ID of the element that will trigger the file manager dialog
+ * @param options.title - The title of the file manager dialog
+ * @param options.allowUpload - Whether to allow file uploads
+ * @param options.allowDelete - Whether to allow file deletions
+ * @param options.allowRename - Whether to allow renaming of files and directories
+ * @param options.allowCreateFolder - Whether to allow creation of new folders
+ * @throws Will throw an error if the trigger element is not found
+ */
 export function initFileManager(options: FileManagerOptions) {
     const trigger = document.getElementById(options.triggerId)! as HTMLElement;
     if (!trigger) {
