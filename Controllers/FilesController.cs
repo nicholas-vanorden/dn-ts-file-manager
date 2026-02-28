@@ -106,7 +106,7 @@ namespace FileManager.Controllers
                 var contentType = "application/octet-stream";
 
                 // if there's an issue with the path, return 404
-                if (!IsPathSafe(path, expectDirectory: false) || !System.IO.File.Exists(fullPath))
+                if (!IsPathSafe(fullPath, expectDirectory: false))
                 {
                     _logger.LogWarning("Invalid download path requested: {path}", path);
                     return NotFound();
