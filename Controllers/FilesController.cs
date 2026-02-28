@@ -48,7 +48,7 @@ namespace FileManager.Controllers
                 var fullPath = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
                 // if there's an issue with the path, reset to root
-                if (!IsPathSafe(path, fullPath))
+                if (!IsPathSafe(fullPath))
                 {
                     _logger.LogWarning("Invalid path requested: {path}", path);
 
@@ -106,7 +106,7 @@ namespace FileManager.Controllers
                 var contentType = "application/octet-stream";
 
                 // if there's an issue with the path, return 404
-                if (!IsPathSafe(path, fullPath) || !System.IO.File.Exists(fullPath))
+                if (!IsPathSafe(path, expectDirectory: false) || !System.IO.File.Exists(fullPath))
                 {
                     _logger.LogWarning("Invalid download path requested: {path}", path);
                     return NotFound();
@@ -144,7 +144,7 @@ namespace FileManager.Controllers
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
                 // if there's an issue with the path, return 400
-                if (!IsPathSafe(path, targetDir))
+                if (!IsPathSafe(targetDir))
                 {
                     _logger.LogWarning("Invalid upload path: {path}", path);
                     return BadRequest(new { error = "Invalid path" });
@@ -191,7 +191,7 @@ namespace FileManager.Controllers
                 
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
-                if (!IsPathSafe(path, targetDir))
+                if (!IsPathSafe(targetDir))
                 {
                     _logger.LogWarning("Invalid path for CreateFolder: {path}", path);
                     return BadRequest("Invalid path");
@@ -238,7 +238,7 @@ namespace FileManager.Controllers
                 path = NormalizePath(path);
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
-                if (!IsPathSafe(path, targetDir))
+                if (!IsPathSafe(targetDir))
                 {
                     _logger.LogWarning("Invalid path for Rename: {path}", path);
                     return BadRequest("Invalid path");
@@ -301,7 +301,7 @@ namespace FileManager.Controllers
                 path = NormalizePath(path);
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
-                if (!IsPathSafe(path, targetDir))
+                if (!IsPathSafe(targetDir))
                 {
                     _logger.LogWarning("Invalid path for Delete: {path}", path);
                     return BadRequest("Invalid path");
@@ -350,16 +350,25 @@ namespace FileManager.Controllers
         }
 
         /// <summary>
-        /// Check if a given path is safe to access by ensuring it does not contain invalid characters and is within the root directory
+        /// Check if a given path is safe by ensuring it does not contain invalid characters, is within the root directory, and optionally checking for existence and type (file or directory)
         /// </summary>
-        /// <param name="path"></param>
         /// <param name="fullPath"></param>
+        /// <param name="expectDirectory"></param>
         /// <returns></returns>
-        private bool IsPathSafe(string path, string fullPath)
+        private bool IsPathSafe(string fullPath, bool expectDirectory = true)
         {
-            return !path.Contains(':') &&
-                fullPath.StartsWith(Path.GetFullPath(_rootDirectory)) &&
-                Directory.Exists(fullPath);
+            var root = Path.GetFullPath(_rootDirectory);
+            var candidate = Path.GetFullPath(fullPath);
+
+            var relative = Path.GetRelativePath(root, candidate);
+            var withinRoot =
+                !relative.Equals("..", StringComparison.Ordinal) &&
+                !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
+                !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal) &&
+                !Path.IsPathRooted(relative);
+
+            if (!withinRoot) return false;
+            return expectDirectory ? Directory.Exists(candidate) : System.IO.File.Exists(candidate);
         }
 
         /// <summary>
