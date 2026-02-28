@@ -48,9 +48,7 @@ namespace FileManager.Controllers
                 var fullPath = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
                 // if there's an issue with the path, reset to root
-                if (path.Contains(':') ||
-                    !fullPath.StartsWith(Path.GetFullPath(_rootDirectory)) ||
-                    !Directory.Exists(fullPath))
+                if (!IsPathSafe(path, fullPath))
                 {
                     _logger.LogWarning("Invalid path requested: {path}", path);
 
@@ -108,9 +106,7 @@ namespace FileManager.Controllers
                 var contentType = "application/octet-stream";
 
                 // if there's an issue with the path, return 404
-                if (path.Contains(':') ||
-                    !fullPath.StartsWith(Path.GetFullPath(_rootDirectory)) ||
-                    !System.IO.File.Exists(fullPath))
+                if (!IsPathSafe(path, fullPath) || !System.IO.File.Exists(fullPath))
                 {
                     _logger.LogWarning("Invalid download path requested: {path}", path);
                     return NotFound();
@@ -148,9 +144,7 @@ namespace FileManager.Controllers
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
                 // if there's an issue with the path, return 400
-                if (path.Contains(':') ||
-                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
-                    !Directory.Exists(targetDir))
+                if (!IsPathSafe(path, targetDir))
                 {
                     _logger.LogWarning("Invalid upload path: {path}", path);
                     return BadRequest(new { error = "Invalid path" });
@@ -197,9 +191,7 @@ namespace FileManager.Controllers
                 
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
-                if (path.Contains(':') ||
-                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
-                    !Directory.Exists(targetDir))
+                if (!IsPathSafe(path, targetDir))
                 {
                     _logger.LogWarning("Invalid path for CreateFolder: {path}", path);
                     return BadRequest("Invalid path");
@@ -246,9 +238,7 @@ namespace FileManager.Controllers
                 path = NormalizePath(path);
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
-                if (path.Contains(':') ||
-                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
-                    !Directory.Exists(targetDir))
+                if (!IsPathSafe(path, targetDir))
                 {
                     _logger.LogWarning("Invalid path for Rename: {path}", path);
                     return BadRequest("Invalid path");
@@ -311,9 +301,7 @@ namespace FileManager.Controllers
                 path = NormalizePath(path);
                 var targetDir = Path.GetFullPath(Path.Combine(_rootDirectory, path));
 
-                if (path.Contains(':') ||
-                    !targetDir.StartsWith(Path.GetFullPath(_rootDirectory)) ||
-                    !Directory.Exists(targetDir))
+                if (!IsPathSafe(path, targetDir))
                 {
                     _logger.LogWarning("Invalid path for Delete: {path}", path);
                     return BadRequest("Invalid path");
@@ -350,12 +338,34 @@ namespace FileManager.Controllers
             }
         }
         
+        /// <summary>
+        /// Normalize a path by decoding URL-encoded characters and replacing backslashes with forward slashes
+        /// </summary>
+        /// <param name="path">The path to normalize</param>
+        /// <returns>The normalized path</returns>
         private string NormalizePath(string? path)
         {
             path ??= string.Empty;
             return WebUtility.UrlDecode(path).Replace('\\', '/').Trim('/');
         }
 
+        /// <summary>
+        /// Check if a given path is safe to access by ensuring it does not contain invalid characters and is within the root directory
+        /// </summary>
+        /// <param name="path"></param>
+        /// <param name="fullPath"></param>
+        /// <returns></returns>
+        private bool IsPathSafe(string path, string fullPath)
+        {
+            return !path.Contains(':') &&
+                fullPath.StartsWith(Path.GetFullPath(_rootDirectory)) &&
+                Directory.Exists(fullPath);
+        }
+
+        /// <summary>
+        /// Delete a directory and all its contents, ensuring that all files and subdirectories have their attributes set to normal before deletion to avoid issues with read-only files
+        /// </summary>
+        /// <param name="path"></param>
         private void DeleteDirectorySafely(string path)
         {
             if (!Directory.Exists(path))
