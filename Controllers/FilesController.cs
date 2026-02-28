@@ -197,6 +197,10 @@ namespace FileManager.Controllers
                     return BadRequest("Invalid path");
                 }
 
+                if (!IsNameSafe(name))
+                {
+                    return BadRequest("Invalid folder name");
+                }
                 var newDir = Path.Combine(targetDir, name);
 
                 if (Directory.Exists(newDir))
@@ -244,6 +248,10 @@ namespace FileManager.Controllers
                     return BadRequest("Invalid path");
                 }
 
+                if (!IsNameSafe(oldName) || !IsNameSafe(newName))
+                {
+                    return BadRequest("Invalid names");
+                }
                 var source = Path.Combine(targetDir, oldName);
                 var target = Path.Combine(targetDir, newName);
 
@@ -307,6 +315,10 @@ namespace FileManager.Controllers
                     return BadRequest("Invalid path");
                 }
 
+                if (!IsNameSafe(name))
+                {
+                    return BadRequest("Invalid name");
+                }
                 var target = Path.Combine(targetDir, name);
 
                 if (type == "file")
@@ -369,6 +381,21 @@ namespace FileManager.Controllers
 
             if (!withinRoot) return false;
             return expectDirectory ? Directory.Exists(candidate) : System.IO.File.Exists(candidate);
+        }
+
+        /// <summary>
+        /// Check if a given name is safe by ensuring it is not null or whitespace, does not contain path separators, is not "." or "..", and does not contain any invalid filename characters
+        /// </summary>
+        /// <param name="value"></param>
+        /// <returns></returns>
+        private bool IsNameSafe(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            if (Path.IsPathRooted(value)) return false;
+            if (value != Path.GetFileName(value)) return false;
+            if (value == "." || value == "..") return false;
+            var invalidChars = Path.GetInvalidFileNameChars();
+            return !value.Any(c => invalidChars.Contains(c));
         }
 
         /// <summary>
